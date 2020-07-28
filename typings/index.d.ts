@@ -112,7 +112,7 @@ declare namespace commander {
     /**
      * Register callback to use as replacement for calling process.exit.
      */
-    exitOverride(callback?: (err: CommanderError) => never|void): this;
+    exitOverride(callback?: (err: CommanderError) => never | void): this;
 
     /**
      * Register callback `fn` for the command.
@@ -174,6 +174,8 @@ declare namespace commander {
     option(flags: string, description?: string, defaultValue?: string | boolean): this;
     option(flags: string, description: string, regexp: RegExp, defaultValue?: string | boolean): this;
     option<T>(flags: string, description: string, fn: (value: string, previous: T) => T, defaultValue?: T): this;
+    option(flags: string, description: string, regexp: RegExp, defaultValue?: string | boolean, helpGroup?: number): this;
+    option<T>(flags: string, description: string, fn: (value: string, previous: T) => T, defaultValue?: T, helpGroup?: number): this;
 
     /**
      * Define a required option, which must have a value after parsing. This usually means
@@ -184,6 +186,8 @@ declare namespace commander {
     requiredOption(flags: string, description?: string, defaultValue?: string | boolean): this;
     requiredOption(flags: string, description: string, regexp: RegExp, defaultValue?: string | boolean): this;
     requiredOption<T>(flags: string, description: string, fn: (value: string, previous: T) => T, defaultValue?: T): this;
+    requiredOption(flags: string, description: string, regexp: RegExp, defaultValue?: string | boolean, helpGroup?: number): this;
+    requiredOption<T>(flags: string, description: string, fn: (value: string, previous: T) => T, defaultValue?: T, helpGroup?: number): this;
 
     /**
      * Whether to store option values as properties on command object,
@@ -266,11 +270,24 @@ declare namespace commander {
      *
      * @returns `this` command for chaining
      */
-    description(str: string, argsDescription?: {[argName: string]: string}): this;
+    description(str: string, argsDescription?: { [argName: string]: string }): this;
     /**
      * Get the description.
      */
     description(): string;
+
+    /**
+     * Set the command's group number.
+     * 
+     * @param grp group index
+     * @returns `this` command for chaining
+     */
+    helpGroup(grp: number): this;
+
+    /**
+     * Get the command's group index.
+     */
+    helpGroup(): number;
 
     /**
      * Set an alias for the command.
