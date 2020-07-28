@@ -34,6 +34,7 @@ class Option {
     }
     this.description = description || '';
     this.defaultValue = undefined;
+    this.helpGroup = 0;
   }
 
   /**
@@ -133,6 +134,7 @@ class Command extends EventEmitter {
     this._helpDescription = 'display help for command';
     this._helpShortFlag = '-h';
     this._helpLongFlag = '--help';
+    this._helpGroup = 0;
     this._hasImplicitHelpCommand = undefined; // Deliberately undefined, not decided whether true or false
     this._helpCommandName = 'help';
     this._helpCommandnameAndArgs = 'help [command]';
@@ -489,6 +491,7 @@ class Command extends EventEmitter {
     const oname = option.name();
     const name = option.attributeName();
     option.mandatory = !!config.mandatory;
+    if(Number.isInteger(config.helpGroup)) option.helpGroup = config.helpGroup;
 
     this._checkForOptionNameClash(option);
 
@@ -608,12 +611,13 @@ class Command extends EventEmitter {
    * @param {string} description
    * @param {Function|*} [fn] - custom option processing function or default value
    * @param {*} [defaultValue]
+   * @param {number} [helpGroup] - index for visually grouping options in help output
    * @return {Command} `this` command for chaining
    * @api public
    */
 
-  option(flags, description, fn, defaultValue) {
-    return this._optionEx({}, flags, description, fn, defaultValue);
+  option(flags, description, fn, defaultValue, helpGroup) {
+    return this._optionEx({helpGroup: helpGroup}, flags, description, fn, defaultValue);
   };
 
   /**
@@ -626,12 +630,13 @@ class Command extends EventEmitter {
   * @param {string} description
   * @param {Function|*} [fn] - custom option processing function or default value
   * @param {*} [defaultValue]
+  * @param {number} [helpGroup] - index for visually grouping options in help output
   * @return {Command} `this` command for chaining
   * @api public
   */
 
-  requiredOption(flags, description, fn, defaultValue) {
-    return this._optionEx({ mandatory: true }, flags, description, fn, defaultValue);
+  requiredOption(flags, description, fn, defaultValue, helpGroup) {
+    return this._optionEx({ mandatory: true, helpGroup: helpGroup }, flags, description, fn, defaultValue);
   };
 
   /**
@@ -1282,6 +1287,23 @@ class Command extends EventEmitter {
   };
 
   /**
+   * Set the help group index for this command.
+   * 
+   * This allows for visually grouping commands together in the help output.
+   * 
+   * @param {number} group 
+   * @return {number|Command}
+   */
+  helpGroup(group){
+    if( group === undefined ) return this._helpGroup;
+    if( Number.isInteger(group) ){
+      this._helpGroup = group;
+    }
+
+    return this;
+  }
+
+  /**
    * Set an alias for the command.
    *
    * You may call more than once to add multiple aliases. Only the first alias is shown in the auto-generated help.
@@ -1382,12 +1404,13 @@ class Command extends EventEmitter {
           (cmd._aliases[0] ? '|' + cmd._aliases[0] : '') +
           (cmd.options.length ? ' [options]' : '') +
           (args ? ' ' + args : ''),
-        cmd._description
+        cmd._description,
+        cmd._helpGroup
       ];
     });
 
     if (this._lazyHasImplicitHelpCommand()) {
-      commandDetails.push([this._helpCommandnameAndArgs, this._helpCommandDescription]);
+      commandDetails.push([this._helpCommandnameAndArgs, this._helpCommandDescription, Number.MAX_SAFE_INTEGER]);
     }
     return commandDetails;
   };
@@ -1476,11 +1499,23 @@ class Command extends EventEmitter {
       return pad(flags, width) + '  ' + optionalWrap(description, descriptionWidth, width + 2);
     };
 
+    let lastOptGrp = 0;
+
     // Explicit options (including version)
-    const help = this.options.map((option) => {
+    const help = this.options.sort((opt1, opt2) => {
+      if(opt1.helpGroup > opt2.helpGroup) return 1;
+      else if(opt1.helpGroup < opt2.helpGroup) return -1;
+      else return 0;
+    }).map((option, oidx) => {
       const fullDesc = option.description +
         ((!option.negate && option.defaultValue !== undefined) ? ' (default: ' + JSON.stringify(option.defaultValue) + ')' : '');
-      return padOptionDetails(option.flags, fullDesc);
+      let paddedOpt = padOptionDetails(option.flags, fullDesc);
+
+      const nextOpt = this.options[oidx+1] ? this.options[oidx+1] : undefined;
+      if(nextOpt && nextOpt.helpGroup > option.helpGroup) paddedOpt += '\n';
+      lastOptGrp = option.helpGroup;
+
+      return paddedOpt;
     });
 
     // Implicit help
@@ -1493,6 +1528,9 @@ class Command extends EventEmitter {
       } else if (!showLongHelpFlag) {
         helpFlags = this._helpShortFlag;
       }
+
+      if( lastOptGrp > 0) help.push('');
+
       help.push(padOptionDetails(helpFlags, this._helpDescription));
     }
 
@@ -1517,9 +1555,23 @@ class Command extends EventEmitter {
 
     return [
       'Commands:',
-      commands.map((cmd) => {
+      // sort commands by command group
+      commands.sort((c1,c2) => {
+        if( c1[2] > c2[2] ) return 1;
+        else if( c1[2] < c2[2] ) return -1;
+        else return 0;
+      }).map((cmd, cidx) => {
         const desc = cmd[1] ? '  ' + cmd[1] : '';
-        return (desc ? pad(cmd[0], width) : cmd[0]) + optionalWrap(desc, descriptionWidth, width + 2);
+        let cmdOutput = (desc ? pad(cmd[0], width) : cmd[0]) + optionalWrap(desc, descriptionWidth, width + 2);
+
+        const nextGrp = commands[cidx+1] ? commands[cidx+1][2] : undefined;
+
+        // if this command ends a group, add newline, except for ending help cmd
+        if(nextGrp && nextGrp > cmd[2] && (nextGrp !== Number.MAX_SAFE_INTEGER || cmd[2] !== 0)){
+          cmdOutput += '\n';
+        }
+
+        return cmdOutput;
       }).join('\n').replace(/^/gm, '  '),
       ''
     ].join('\n');
